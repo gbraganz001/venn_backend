@@ -1,7 +1,5 @@
 #  VELOCITY LIMIT ENGINE
 
-> _A financial transaction velocity guard. Evaluates. Enforces. Protects._
-
 ---
 
 ## ▶️ HOW TO RUN
@@ -39,7 +37,7 @@ gradle -version
 ```
 ---
 
-## 🔎 VERIFY RESULTS
+## VERIFY RESULTS
 
 **Request:**
 
@@ -64,7 +62,7 @@ gradle -version
 
 ---
 
-## 🧪 TESTS
+## TESTS
 
 ```bash
 ./gradlew test
