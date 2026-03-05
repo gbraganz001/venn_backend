@@ -1,104 +1,169 @@
-Velocity Load Processor
-Overview
+▶️ How to Run the Application
+1️⃣ Prerequisites
 
-This project implements a velocity limit processor for financial load transactions.
-Each incoming load request is evaluated against a set of daily and weekly limits per customer to determine whether the transaction should be accepted or declined.
+Ensure the following are installed:
 
-The service ensures:
+Java 17+
 
-Idempotency (duplicate loads are ignored)
+Gradle 7+
 
-Concurrency safety
+Verify installation:
 
-Accurate daily and weekly aggregation
+java -version
+gradle -version
+2️⃣ Build the Project
+./gradlew build
 
-UTC-based time handling
+or if Gradle is installed globally:
 
-The implementation uses Spring Boot, Spring Data JPA, and transactional database locking to guarantee correctness.
+gradle build
+3️⃣ Run the Application
 
-Problem Statement
+Start the Spring Boot application:
+
+./gradlew bootRun
+
+The service will start at:
+
+http://localhost:8080
+🔎 How to Verify Results
+
+The application evaluates load requests and determines whether the transaction should be accepted or declined based on velocity rules.
+
+Example Request
+{
+  "id": "LOAD_ID",
+  "customer_id": "CUSTOMER_ID",
+  "load_amount": "$1234.56",
+  "time": "2000-01-01T00:00:00Z"
+}
+Example Response
+{
+  "id": "LOAD_ID",
+  "customer_id": "CUSTOMER_ID",
+  "accepted": true
+}
+🧪 Running the Tests
+
+Integration tests verify the velocity rules and system behavior.
+
+Run:
+
+./gradlew test
+
+Expected output:
+
+BUILD SUCCESSFUL
+
+Tests validate:
+
+✔ Idempotency handling
+✔ Daily transaction count limits
+✔ Daily amount limits
+✔ Weekly limits
+✔ Midnight UTC boundary reset
+✔ Weekly boundary reset (Monday start)
+
+📘 Problem Overview
 
 A financial system processes load transactions for customer accounts.
 
+Each incoming transaction must be evaluated against velocity limits to determine whether it should be accepted or declined.
+
+The system ensures:
+
+Idempotent processing
+
+Correct daily and weekly aggregation
+
+UTC time boundary enforcement
+
+Concurrency-safe updates
+
+📥 Load Request Format
+
 Each load request contains:
 
-id – unique identifier of the load event
+Field	Description
+id	Unique identifier for the load
+customer_id	Customer identifier
+load_amount	Dollar amount
+time	ISO-8601 timestamp
 
-customer_id – customer receiving the load
-
-load_amount – dollar amount
-
-time – timestamp of the event
-
-Example request:
+Example:
 
 {
-"id": "LOAD_ID",
-"customer_id": "CUSTOMER_ID",
-"load_amount": "$1234.56",
-"time": "2000-01-01T00:00:00Z"
+  "id": "LOAD_ID",
+  "customer_id": "CUSTOMER_ID",
+  "load_amount": "$1234.56",
+  "time": "2000-01-01T00:00:00Z"
 }
+📤 Response Format
 
-For every request the system must output:
+For every processed request:
 
 {
-"id": "LOAD_ID",
-"customer_id": "CUSTOMER_ID",
-"accepted": true | false
+  "id": "LOAD_ID",
+  "customer_id": "CUSTOMER_ID",
+  "accepted": true | false
 }
-Business Rules
+📏 Velocity Rules
 
-Velocity limits are enforced per customer.
+Velocity limits apply per customer.
 
-Daily Limits
+📅 Daily Limits
 
 Per UTC day:
 
 Rule	Limit
-Maximum number of accepted loads	3
-Maximum total accepted amount	$5,000
+Maximum accepted loads	3
+Maximum accepted amount	$5,000
 
-If a load causes either of these limits to be exceeded, the load must be declined.
+If either rule is exceeded, the load is declined.
 
-Weekly Limits
+📆 Weekly Limits
 
 Per UTC week (Monday → Sunday):
 
 Rule	Limit
-Maximum total accepted amount	$20,000
+Maximum accepted amount	$20,000
 
-If accepting the load would exceed this limit, it must be declined.
+If accepting the transaction exceeds the weekly limit, it must be declined.
 
-Idempotency
+🔁 Idempotency
 
-If the system receives the same id for the same customer more than once:
+Duplicate loads must not affect system state.
 
-Only the first request should be processed.
+If the system receives the same request twice:
 
-Subsequent duplicates must produce no response and must not affect counters.
+same load id + same customer
+
+The duplicate request is:
+
+ignored
+
+not processed
+
+not counted toward limits
 
 However:
 
-The same id for different customers is allowed.
-
-Time Rules
+same load id + different customer → allowed
+⏱ Time Handling
 
 All calculations use UTC.
 
-Daily boundary
+Daily Boundary
 
-A new day starts at:
+Daily counters reset at:
 
 00:00:00 UTC
 
 Example:
 
-2000-02-01T23:59:59Z  → Feb 1
-2000-02-02T00:00:00Z  → Feb 2
-
-Daily counters reset at midnight.
-
-Weekly boundary
+2000-02-01T23:59:59Z → Feb 1
+2000-02-02T00:00:00Z → Feb 2
+Weekly Boundary
 
 Weeks start on Monday (UTC).
 
@@ -108,67 +173,37 @@ Mon Feb 7 00:00:00Z → new week
 
 Weekly counters reset at this boundary.
 
-Architecture
-
-The system is implemented as a Spring Boot service with the following components.
-
-Core Service
+🏗 Architecture
 LoadService
+│
+├── IdempotentLoadService
+│
+├── LoadRepository
+├── LoadPerDayRepository
+└── LoadPerWeekRepository
+🗄 Data Model
 
-Responsible for:
-
-Processing load requests
-
-Checking limits
-
-Updating aggregates
-
-Returning responses
-
-Key method:
-
-Optional<LoadResponse> process(LoadRequest request)
-
-Returns:
-
-Optional.empty() → duplicate load
-
-LoadResponse → accepted or declined
-
-Idempotency
-IdempotentLoadService
-
-Checks whether a load ID has already been processed for the same customer.
-
-existsByCustomerIdAndLoadId()
-
-If duplicate:
-
-return Optional.empty()
-Data Model
-
-The service maintains three tables.
+The system maintains three tables.
 
 LoadEntity
 
-Stores every load attempt.
+Stores each load attempt.
 
 Field	Description
-id	database id
-loadId	load identifier
-customerId	customer
-eventTime	timestamp
-amountCents	amount in cents
-accepted	accepted / declined
+loadId	Load identifier
+customerId	Customer
+eventTime	Timestamp
+amountCents	Amount in cents
+accepted	Accepted or declined
 LoadPerDay
 
 Stores daily aggregates.
 
 Field	Description
-customerId	customer
-dayInUtc	UTC day
-acceptedCount	number of accepted loads
-acceptedAmountCents	accepted total
+customerId	Customer
+dayInUtc	UTC date
+acceptedCount	Number of accepted loads
+acceptedAmountCents	Total accepted amount
 
 Unique constraint:
 
@@ -178,146 +213,84 @@ LoadPerWeek
 Stores weekly aggregates.
 
 Field	Description
-customerId	customer
+customerId	Customer
 weekStartDate	Monday of the week
-acceptedAmountCents	weekly accepted total
+acceptedAmountCents	Weekly accepted amount
 
 Unique constraint:
 
 (customer_id, week_start_date)
-Concurrency Handling
+🔒 Concurrency Handling
 
-To ensure correct limits under concurrent requests, the service uses:
+To prevent race conditions, the system uses:
 
-PESSIMISTIC_WRITE locks
+PESSIMISTIC_WRITE locking
 
-Repositories provide locking queries:
+Processing steps:
 
-lockByCustomerAndDay()
-lockByCustomerAndWeek()
+Lock daily aggregate
 
-These ensure that only one transaction can update the aggregate rows at a time.
+Lock weekly aggregate
 
-Time Calculations
+Validate limits
 
-All time calculations use UTC.
+Update aggregates
 
-UTC Day
-LocalDate utcDay = instant.atZone(UTC).toLocalDate()
-Week Start (Monday)
-LocalDate weekStart =
-utcDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+This ensures concurrent requests cannot exceed limits.
 
-This ensures consistent week boundaries.
-
-Implementation Flow
-
-Processing a request:
-
-1. Check idempotency
-2. Persist load attempt
-3. Lock daily aggregate
-4. Lock weekly aggregate
-5. Validate limits
-6. If accepted:
-   update aggregates
-7. Save result
-8. Return response
-   Limit Validation Logic
-   accepted = true
+⚙ Limit Evaluation Logic
+accepted = true
 
 if dailyCount + 1 > 3
-accepted = false
+    accepted = false
 
 if dailyAmount + amount > 5000
-accepted = false
+    accepted = false
 
 if weeklyAmount + amount > 20000
-accepted = false
+    accepted = false
 
-Counters update only if accepted.
+Counters update only if the transaction is accepted.
 
-Testing
+🧠 Design Decisions
+Aggregation tables
 
-Integration tests validate:
-
-Idempotency
-
-Duplicate loads are ignored.
-
-Daily limits
-
-Max 3 loads
-
-Max $5000
-
-Weekly limits
-
-Max $20000.
-
-Midnight boundary
-
-Daily counters reset at midnight.
-
-Week boundary
-
-Weekly counters reset on Monday.
-
-Tests run with:
-
-@SpringBootTest
-@ActiveProfiles("test")
-
-Database is cleared between tests.
-
-Running the Application
-Build
-mvn clean install
-Run
-mvn spring-boot:run
-Design Considerations
-Why store aggregates instead of computing from raw loads?
+Storing daily and weekly aggregates avoids expensive queries over all loads.
 
 Benefits:
 
-Faster reads
+faster performance
 
-Lower query cost
+simpler queries
 
-Predictable performance
+predictable scaling
 
-Why pessimistic locking?
+Pessimistic locking
 
-Prevents race conditions where two concurrent requests could:
+Prevents concurrent requests from exceeding velocity limits.
 
-read same totals
-both pass validation
-exceed limits
+Monetary values stored in cents
 
-Locks ensure atomic updates.
+Avoids floating-point precision errors.
 
-Why use cents instead of decimals?
+📌 Assumptions
 
-Avoids floating point precision issues.
+timestamps are provided in UTC
 
-Assumptions
+duplicate loads must not affect counters
 
-Time values are trusted and provided in UTC.
+only accepted loads contribute to velocity totals
 
-Duplicate loads with the same id must not produce a second response.
+🔮 Possible Improvements
 
-Limits apply only to accepted loads.
+Future enhancements may include:
 
-Future Improvements
+distributed event ingestion
 
-Possible enhancements:
+metrics and monitoring
 
-Event streaming ingestion
+rate-limit dashboards
 
-Horizontal scaling
+horizontal scaling support
 
-Caching layer
-
-Rate-limit metrics
-
-Observability (Prometheus / tracing)
+event replay capability
