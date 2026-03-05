@@ -3,7 +3,7 @@
 
 Ensure the following are installed:
 
-Java 17+
+Java 21+
 
 Gradle 7+
 
